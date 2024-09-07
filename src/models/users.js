@@ -2,7 +2,7 @@ const mongoose = require('mongoose')
 
 const userSchema = new mongoose.Schema({
   name: String,
-  active: Boolean
+  active: { type: Boolean, default: true }
 })
 
 const User = mongoose.model('User', userSchema, 'Users')

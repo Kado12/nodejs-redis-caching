@@ -135,6 +135,36 @@ app.patch("/Users/:id", async (req, res, next) => {
 });
 
 
+// Post
+app.post("/Users", async (req, res, next) => {
+  try {
+    const { name, active } = req.body;
+
+    // Creamos un nuevo usuario
+    const user = new User({ name, active });
+    const userId = user._id.toString()
+
+    // Guardamos el usuario en la base de datos
+    await user.save();
+
+    // Actualizamos los datos en Redis
+    const saveResult = await client.set(
+      `user:${userId}`,
+      JSON.stringify(user),
+      {
+        EX: 60,
+      }
+    );
+    console.log(saveResult)
+
+    res.send({ message: "Usuario creado correctamente" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ message: "Error al crear usuario" });
+  }
+});
+
+
 async function main() {
   await client.connect();
   app.listen(3000);

@@ -36,7 +36,7 @@ const client = createClient({
 
 app.use(responseTime());
 
-// Get all characters
+// Get all 
 app.get("/Users", async (req, res, next) => {
   try {
     // Search Data in Redis
@@ -64,10 +64,39 @@ app.get("/Users", async (req, res, next) => {
 });
 
 
+// Get for Id
+app.get("/Users/:id", async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    // Search Data in Redis
+    const reply = await client.get(`user:${userId}`);
+    // if exists returns from redis and finish with response
+    if (reply) return res.send(JSON.parse(reply));
+
+    const users = await User.findById(userId).exec()
+    console.log(users)
+
+    // Saving the results in Redis. The "EX" and 10, sets an expiration of 10 Seconds
+    const saveResult = await client.set(
+      `user:${userId}`,
+      JSON.stringify(users),
+      {
+        EX: 60,
+      }
+    );
+    console.log(saveResult)
+
+    res.send(users);
+  } catch (error) {
+    res.send(error.message);
+  }
+});
+
+
+// Patch
 app.patch("/Users/:id", async (req, res, next) => {
   try {
     const userId = req.params.id;
-    console.log(req.body)
     const { name, active } = req.body; // Obtenemos los datos actualizados desde el cuerpo de la solicitud
 
     // Buscamos el usuario por ID
@@ -87,7 +116,6 @@ app.patch("/Users/:id", async (req, res, next) => {
 
     // Guardamos los cambios en la base de datos
     await user.save();
-
 
     // Actualizamos los datos en Redis
     const saveResult = await client.set(

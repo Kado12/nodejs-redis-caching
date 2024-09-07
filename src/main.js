@@ -11,15 +11,22 @@ mongoose.connect(MONGODB_URI, {
   .then(db => console.log('Database is connected'))
   .catch(err => console.log(err))
 
-
+// NodeJS
 const express = require("express");
 const axios = require("axios");
 const { createClient } = require("redis");
 const responseTime = require("response-time");
+const bodyParser = require('body-parser');
 
-
+// Models
+const User = require('./models/users')
 
 const app = express();
+
+app.use(bodyParser.json()); // parse application/json
+app.use(bodyParser.urlencoded({ extended: true })); // parse application/x-www-form-urlencoded
+
+// ...
 
 // Connecting to redis
 const client = createClient({
@@ -30,65 +37,75 @@ const client = createClient({
 app.use(responseTime());
 
 // Get all characters
-app.get("/character", async (req, res, next) => {
+app.get("/Users", async (req, res, next) => {
   try {
     // Search Data in Redis
-    const reply = await client.get("character");
+    const reply = await client.get("user");
 
     // if exists returns from redis and finish with response
     if (reply) return res.send(JSON.parse(reply));
 
-    // Fetching Data from Rick and Morty API
-    const response = await axios.get(
-      "https://rickandmortyapi.com/api/character"
-    );
+    const users = await User.find().exec()
 
     // Saving the results in Redis. The "EX" and 10, sets an expiration of 10 Seconds
     const saveResult = await client.set(
-      "character",
-      JSON.stringify(response.data),
+      "user",
+      JSON.stringify(users),
       {
         EX: 60,
       }
     );
     console.log(saveResult)
 
-    // resond to client
-    res.send(response.data);
+    res.send(users);
   } catch (error) {
     res.send(error.message);
   }
 });
 
-// Get a single character
-app.get("/character/:id", async (req, res, next) => {
-  try {
-    const reply = await client.get(req.params.id);
 
-    if (reply) {
-      console.log("using cached data");
-      return res.send(JSON.parse(reply));
+app.patch("/Users/:id", async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    console.log(req.body)
+    const { name, active } = req.body; // Obtenemos los datos actualizados desde el cuerpo de la solicitud
+
+    // Buscamos el usuario por ID
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).send({ message: "Usuario no encontrado" });
     }
 
-    const response = await axios.get(
-      "https://rickandmortyapi.com/api/character/" + req.params.id
-    );
+    // Actualizamos los campos del usuario
+    if (name) {
+      user.name = name;
+    }
+    if (active !== undefined) {
+      user.active = active;
+    }
+
+    // Guardamos los cambios en la base de datos
+    await user.save();
+
+
+    // Actualizamos los datos en Redis
     const saveResult = await client.set(
-      req.params.id,
-      JSON.stringify(response.data),
+      `user:${userId}`,
+      JSON.stringify(user),
       {
         EX: 60,
       }
     );
+    console.log(saveResult)
 
-    console.log("saved data:", saveResult);
-
-    res.send(response.data);
+    res.send({ message: "Usuario actualizado correctamente" });
   } catch (error) {
     console.log(error);
-    res.send(error.message);
+    res.status(500).send({ message: "Error al actualizar usuario" });
   }
 });
+
 
 async function main() {
   await client.connect();
